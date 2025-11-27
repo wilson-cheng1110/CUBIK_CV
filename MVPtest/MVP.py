@@ -174,4 +174,6 @@ if ctx.state.playing and ctx.video_processor:
 
 # Footer
 st.markdown("---")
-st.markdown("Made by Wilson C. @CUBIK Powered by Streamlit, Roboflow Inference, and Supervision. Designed for Cathay Pacific sustainability initiatives.")
+st.markdown("Made by Wilson C. @CUBIK")
+st.markdown("Powered by Streamlit, Roboflow Inference, and Supervision.")
+st.markdown("Designed for Cathay Pacific sustainability initiatives.")
