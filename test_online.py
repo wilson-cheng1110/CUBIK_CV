@@ -3,6 +3,8 @@ import av
 import supervision as sv
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 from inference_sdk import InferenceHTTPClient
+import cv2
+import numpy as np
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Roboflow Live Inference", layout="centered")

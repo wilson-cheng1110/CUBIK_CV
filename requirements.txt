@@ -3,3 +3,5 @@ streamlit-webrtc
 supervision
 inference-sdk
 av
+opencv-python-headless
+numpy
