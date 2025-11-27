@@ -1,6 +1,5 @@
 streamlit
 streamlit-webrtc
-opencv-python-headless==4.10.0.84  # Headless version for servers without GUI
 supervision
 inference-sdk
 cv2

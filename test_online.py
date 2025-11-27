@@ -1,69 +1,77 @@
 import streamlit as st
+import av
 import supervision as sv
-from inference import get_model
-import numpy as np
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, VideoTransformerBase
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
+from inference_sdk import InferenceHTTPClient
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Roboflow Live Inference", layout="wide")
+st.set_page_config(page_title="Roboflow Live Inference", layout="centered")
 
-st.title("🤖 Roboflow Webcam Inference")
-st.markdown("Detected objects will be highlighted in real-time from your browser's webcam.")
+st.title("☁ Public Host Object Detection")
+st.write("This app streams video from YOUR client browser to the server for processing.")
 
 # --- SIDEBAR CONFIG ---
-st.sidebar.header("Configuration")
-api_key = "cD8O59BRprZIhIp4jRxk"
-model_id = "cubik-cv-zyzo7/7"
-confidence = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.05)
-
-# Use session state to track if streaming is active
-if 'streaming' not in st.session_state:
-    st.session_state.streaming = False
-
-# --- START/STOP BUTTONS ---
-col1, col2 = st.sidebar.columns(2)
-if col1.button("Start Inference"):
-    if api_key and model_id:
-        st.session_state.streaming = True
-    else:
-        st.error("Please provide API Key and Model ID.")
-if col2.button("Stop Inference"):
-    st.session_state.streaming = False
+st.sidebar.header("Settings")
+# We use st.secrets for safety on public hosts, but allow manual entry for testing
+# On Streamlit Cloud, set these in the "Secrets" management tab.
+ROBOFLOW_API_KEY = st.sidebar.text_input("Roboflow API Key", type="password")
+MODEL_ID = st.sidebar.text_input("Model ID", value="yolov8n-640")
 
 # --- MAIN LOGIC ---
-if st.session_state.streaming:
-    # Load model once (outside the transformer to avoid reloading per frame)
+
+if not ROBOFLOW_API_KEY:
+    st.error("Please provide a Roboflow API Key to proceed.")
+    st.stop()
+
+# Initialize the Roboflow Client
+# We use InferenceHTTPClient here because it is lighter on the server's memory
+# than loading the full model weights locally on a free-tier cloud instance.
+client = InferenceHTTPClient(
+    api_url="https://detect.roboflow.com",
+    api_key=ROBOFLOW_API_KEY
+)
+
+# Initialize Annotators
+box_annotator = sv.BoxAnnotator(thickness=2)
+label_annotator = sv.LabelAnnotator(text_scale=0.5, text_thickness=1)
+
+# Definition of the callback function
+# This function runs inside a separate thread for every single video frame
+def callback(frame: av.VideoFrame) -> av.VideoFrame:
+    # 1. Convert frame to numpy array (OpenCV format)
+    image = frame.to_ndarray(format="bgr24")
+
+    # 2. Run Inference
+    # We send the image to Roboflow's API. 
+    # Note: For high FPS, a local model is better, but this is safest for public cloud memory.
     try:
-        model = get_model(model_id=model_id, api_key=api_key)
+        results = client.infer(image, model_id=MODEL_ID)
+        
+        # 3. Process Results
+        # The HTTP client returns a dictionary, we convert it to supervision Detections
+        detections = sv.Detections.from_inference(results)
+
+        # 4. Annotate Frame
+        annotated_frame = box_annotator.annotate(scene=image.copy(), detections=detections)
+        annotated_frame = label_annotator.annotate(scene=annotated_frame, detections=detections)
+        
     except Exception as e:
-        st.error(f"Error loading model: {e}")
-        st.session_state.streaming = False
-        st.stop()
+        # If API fails (e.g., rate limit), just return the original frame
+        print(f"Error: {e}")
+        annotated_frame = image
 
-    # Initialize Annotators
-    box_annotator = sv.BoxAnnotator(thickness=2)
-    label_annotator = sv.LabelAnnotator(text_scale=0.5, text_thickness=1)
+    # 5. Return the annotated frame back to the browser
+    return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
 
-    class RoboflowTransformer(VideoTransformerBase):
-        def transform(self, frame):
-            img = frame.to_ndarray(format="bgr24")  # Convert to OpenCV-compatible array
-
-            # Run Inference
-            results = model.infer(img, confidence=confidence)[0]
-
-            # Process Detections
-            detections = sv.Detections.from_inference(results)
-
-            # Annotate Frame
-            annotated_frame = box_annotator.annotate(scene=img.copy(), detections=detections)
-            annotated_frame = label_annotator.annotate(scene=annotated_frame, detections=detections)
-
-            return annotated_frame  # Return annotated NumPy array (auto-converted to frame)
-
-    # Start WebRTC streamer (handles client-side camera)
-    webrtc_streamer(
-        key="roboflow-inference",
-        mode=WebRtcMode.SENDRECV,  # Send video to server and receive back
-        video_transformer_factory=RoboflowTransformer,
-        async_transform=True,  # Process frames asynchronously for better performance
-    )
+# --- WEBRTC STREAMER ---
+# This is the magic component that replaces cv2.VideoCapture
+webrtc_streamer(
+    key="object-detection",
+    mode=WebRtcMode.SENDRECV,
+    rtc_configuration=RTCConfiguration(
+        {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+    ),
+    video_frame_callback=callback,
+    media_stream_constraints={"video": True, "audio": False},
+    async_processing=True,
+)
