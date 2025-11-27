@@ -1,7 +1,7 @@
 streamlit==1.38.0
 streamlit-webrtc==0.47.9
 supervision==0.24.0
-inference-sdk==0.17.0
+inference-sdk==0.62.2
 av==12.3.0
 matplotlib==3.9.2
 pandas==2.2.3
