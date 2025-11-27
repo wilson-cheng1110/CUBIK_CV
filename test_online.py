@@ -16,8 +16,8 @@ st.write("This app streams video from YOUR client browser to the server for proc
 st.sidebar.header("Settings")
 # We use st.secrets for safety on public hosts, but allow manual entry for testing
 # On Streamlit Cloud, set these in the "Secrets" management tab.
-ROBOFLOW_API_KEY = st.sidebar.text_input("Roboflow API Key", type="password")
-MODEL_ID = st.sidebar.text_input("Model ID", value="yolov8n-640")
+ROBOFLOW_API_KEY = "cD8O59BRprZIhIp4jRxk"
+MODEL_ID = "cubik-cv-zyzo7/7"
 
 # --- MAIN LOGIC ---
 
