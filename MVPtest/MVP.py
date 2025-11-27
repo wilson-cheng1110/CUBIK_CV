@@ -40,14 +40,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Placeholder for model details - replace with your actual Roboflow model ID and API key
-MODEL_ID = "your-food-waste-model/1"  # Replace with your model ID, e.g., "airline-food-waste-detection/1"
-API_KEY = "your-roboflow-api-key"  # Replace with your Roboflow API key (ensure it's valid to avoid 403 errors)
+MODEL_ID = "cubik-cv-zyzo7/7"  # Replace with your model ID, e.g., "airline-food-waste-detection/1"
+API_KEY = "cD8O59BRprZIhIp4jRxk"  # Replace with your Roboflow API key (ensure it's valid to avoid 403 errors)
 
 # Initialize Inference Client
 client = InferenceHTTPClient(
     api_url="https://detect.roboflow.com",
-    api_key=API_KEY
-)
+    api_key=API_KEY)
 
 # Class names (assuming your model is trained on these 14 classes)
 CLASS_NAMES = [
