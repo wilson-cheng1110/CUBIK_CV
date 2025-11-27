@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import av
 import threading  # For potential thread safety if needed
+import time
 
 # Set page config
 st.set_page_config(
@@ -117,72 +118,76 @@ ctx = webrtc_streamer(
 )
 
 # Analytics section
-if ctx.state.playing and ctx.video_processor:
-    # Access detections with lock for safety
-    with ctx.video_processor._lock:
-        detections = ctx.video_processor.detections
-    
-    if detections is not None and len(detections) > 0:
-        st.subheader("Detected Items and Waste Analytics")
-
-        # Create DataFrame from detections
-        class_ids = detections.class_id
-        confidences = detections.confidence
-        class_names = [CLASS_NAMES[id] for id in class_ids]
-
-        df = pd.DataFrame({
-            "Item": class_names,
-            "Confidence": confidences
-        })
-
-        # Display detected items table
-        st.table(df)
-
-        # Calculate waste per category
-        waste_data = {}
-        overall_eaten = 0
-        overall_untouched = 0
-
-        for cat in CATEGORIES:
-            eaten_count = sum(1 for name in class_names if name == f"{cat}_eaten")
-            untouched_count = sum(1 for name in class_names if name == f"{cat}_untouched")
-            total = eaten_count + untouched_count
-            waste_perc = (untouched_count / total * 100) if total > 0 else 0
-            waste_data[cat] = {
-                "Eaten": eaten_count,
-                "Untouched": untouched_count,
-                "Waste %": waste_perc
-            }
-            overall_eaten += eaten_count
-            overall_untouched += untouched_count
-
-        # Waste DataFrame
-        waste_df = pd.DataFrame.from_dict(waste_data, orient="index")
-        st.table(waste_df)
-
-        # Overall waste percentage
-        overall_total = overall_eaten + overall_untouched
-        overall_waste_perc = (overall_untouched / overall_total * 100) if overall_total > 0 else 0
-        st.metric("Overall Waste Percentage", f"{overall_waste_perc:.2f}%")
-
-        # Bar chart for waste %
-        fig, ax = plt.subplots()
-        waste_df["Waste %"].plot(kind="bar", ax=ax, color="#00645A")
-        ax.set_ylabel("Waste Percentage")
-        ax.set_title("Waste Percentage by Category")
-        st.pyplot(fig)
-
-        # Pie chart for overall
-        if overall_total > 0:
-            pie_fig, pie_ax = plt.subplots()
-            pie_ax.pie([overall_eaten, overall_untouched], labels=["Eaten", "Untouched"], autopct="%1.1f%%", colors=["#00645A", "#E70013"])
-            pie_ax.set_title("Overall Food Status")
-            st.pyplot(pie_fig)
-    else:
-        st.info("No detections yet. Point the camera at a food tray.")
+analytics_placeholder = st.empty()
 
 # Footer
 st.markdown("---")
 st.markdown("Made by Wilson C. @CUBIK")
 st.markdown("Powered by Streamlit, Roboflow Inference, and Supervision.")
 st.markdown("Designed for Cathay Pacific sustainability initiatives.")
+
+while ctx.state.playing and ctx.video_processor:
+    with ctx.video_processor._lock:
+        detections = ctx.video_processor.detections
+    
+    with analytics_placeholder.container():
+        if detections is not None and len(detections) > 0:
+            st.subheader("Detected Items and Waste Analytics")
+
+            # Create DataFrame from detections
+            class_ids = detections.class_id
+            confidences = detections.confidence
+            class_names = [CLASS_NAMES[id] for id in class_ids]
+
+            df = pd.DataFrame({
+                "Item": class_names,
+                "Confidence": confidences
+            })
+
+            # Display detected items table
+            st.table(df)
+
+            # Calculate waste per category
+            waste_data = {}
+            overall_eaten = 0
+            overall_untouched = 0
+
+            for cat in CATEGORIES:
+                eaten_count = sum(1 for name in class_names if name == f"{cat}_eaten")
+                untouched_count = sum(1 for name in class_names if name == f"{cat}_untouched")
+                total = eaten_count + untouched_count
+                waste_perc = (untouched_count / total * 100) if total > 0 else 0
+                waste_data[cat] = {
+                    "Eaten": eaten_count,
+                    "Untouched": untouched_count,
+                    "Waste %": waste_perc
+                }
+                overall_eaten += eaten_count
+                overall_untouched += untouched_count
+
+            # Waste DataFrame
+            waste_df = pd.DataFrame.from_dict(waste_data, orient="index")
+            st.table(waste_df)
+
+            # Overall waste percentage
+            overall_total = overall_eaten + overall_untouched
+            overall_waste_perc = (overall_untouched / overall_total * 100) if overall_total > 0 else 0
+            st.metric("Overall Waste Percentage", f"{overall_waste_perc:.2f}%")
+
+            # Bar chart for waste %
+            fig, ax = plt.subplots()
+            waste_df["Waste %"].plot(kind="bar", ax=ax, color="#00645A")
+            ax.set_ylabel("Waste Percentage")
+            ax.set_title("Waste Percentage by Category")
+            st.pyplot(fig)
+
+            # Pie chart for overall
+            if overall_total > 0:
+                pie_fig, pie_ax = plt.subplots()
+                pie_ax.pie([overall_eaten, overall_untouched], labels=["Eaten", "Untouched"], autopct="%1.1f%%", colors=["#00645A", "#E70013"])
+                pie_ax.set_title("Overall Food Status")
+                st.pyplot(pie_fig)
+        else:
+            st.info("No detections yet. Point the camera at a food tray.")
+    
+    time.sleep(1)
