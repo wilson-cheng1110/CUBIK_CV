@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import av
+import threading  # For potential thread safety if needed
 
 # Set page config
 st.set_page_config(
@@ -40,7 +41,7 @@ st.markdown("""
 
 # Placeholder for model details - replace with your actual Roboflow model ID and API key
 MODEL_ID = "your-food-waste-model/1"  # Replace with your model ID, e.g., "airline-food-waste-detection/1"
-API_KEY = "your-roboflow-api-key"  # Replace with your Roboflow API key
+API_KEY = "your-roboflow-api-key"  # Replace with your Roboflow API key (ensure it's valid to avoid 403 errors)
 
 # Initialize Inference Client
 client = InferenceHTTPClient(
@@ -70,50 +71,58 @@ st.markdown("Use your webcam to scan airline food trays. The app detects items a
 box_annotator = sv.BoxAnnotator(thickness=2)
 label_annotator = sv.LabelAnnotator(text_scale=0.5, text_thickness=1)
 
-# Definition of the callback function
-# This function runs inside a separate thread for every single video frame
-def callback(frame: av.VideoFrame) -> av.VideoFrame:
-    # 1. Convert frame to numpy array (OpenCV format)
-    image = frame.to_ndarray(format="bgr24")
+# Define VideoProcessor class to handle frame processing and store detections
+class VideoProcessor:
+    def __init__(self):
+        self.detections = None
+        self._lock = threading.Lock()  # For thread safety when accessing detections
 
-    # 2. Run Inference
-    # We send the image to Roboflow's API. 
-    # Note: For high FPS, a local model is better, but this is safest for public cloud memory.
-    try:
-        results = client.infer(image, model_id=MODEL_ID)
-        
-        # 3. Process Results
-        # The HTTP client returns a dictionary, we convert it to supervision Detections
-        detections = sv.Detections.from_inference(results)
+    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+        # 1. Convert frame to numpy array (OpenCV format)
+        image = frame.to_ndarray(format="bgr24")
 
-        # 4. Annotate Frame
-        annotated_frame = box_annotator.annotate(scene=image.copy(), detections=detections)
-        annotated_frame = label_annotator.annotate(scene=annotated_frame, detections=detections)
-        
-    except Exception as e:
-        # If API fails (e.g., rate limit), just return the original frame
-        print(f"Error: {e}")
-        annotated_frame = image
+        # 2. Run Inference
+        try:
+            results = client.infer(image, model_id=MODEL_ID)
+            
+            # 3. Process Results
+            detections = sv.Detections.from_inference(results)
 
-    # 5. Return the annotated frame back to the browser
-    return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
+            # Store detections with lock for thread safety
+            with self._lock:
+                self.detections = detections
+
+            # 4. Annotate Frame
+            annotated_frame = box_annotator.annotate(scene=image.copy(), detections=detections)
+            annotated_frame = label_annotator.annotate(scene=annotated_frame, detections=detections)
+            
+        except Exception as e:
+            # If API fails (e.g., rate limit or 403), just return the original frame
+            print(f"Error: {e}")
+            annotated_frame = image
+
+        # 5. Return the annotated frame back to the browser
+        return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
 
 # --- WEBRTC STREAMER ---
-# This is the magic component that replaces cv2.VideoCapture
-ctx= webrtc_streamer(
+# Use video_processor_factory to create an instance of VideoProcessor
+ctx = webrtc_streamer(
     key="object-detection",
     mode=WebRtcMode.SENDRECV,
     rtc_configuration=RTCConfiguration(
         {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
     ),
-    video_frame_callback=callback,
+    video_processor_factory=VideoProcessor,
     media_stream_constraints={"video": True, "audio": False},
     async_processing=True,
 )
 
 # Analytics section
 if ctx.state.playing and ctx.video_processor:
-    detections = ctx.video_processor.detections
+    # Access detections with lock for safety
+    with ctx.video_processor._lock:
+        detections = ctx.video_processor.detections
+    
     if detections is not None and len(detections) > 0:
         st.subheader("Detected Items and Waste Analytics")
 
