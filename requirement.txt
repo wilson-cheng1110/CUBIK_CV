@@ -1,0 +1,7 @@
+streamlit
+streamlit-webrtc
+opencv-python-headless  # Headless version for servers without GUI
+supervision
+inference-sdk
+cv2
+av  # For pyav, required by webrtc
