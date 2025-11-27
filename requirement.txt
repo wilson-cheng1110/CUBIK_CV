@@ -2,5 +2,4 @@ streamlit
 streamlit-webrtc
 supervision
 inference-sdk
-cv2
-av  # For pyav, required by webrtc
+av
