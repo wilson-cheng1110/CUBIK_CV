@@ -1,6 +1,7 @@
 streamlit
 streamlit-webrtc
-opencv-python-headless==4.10.0.84  # Pin a version for stability; latest may work too
+opencv-python-headless==4.10.0.84  # Headless version for servers without GUI
 supervision
 inference-sdk
-av  # Required for streamlit-webrtc video handling
+cv2
+av  # For pyav, required by webrtc
