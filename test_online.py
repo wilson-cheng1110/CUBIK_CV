@@ -1,9 +1,9 @@
 import streamlit as st
 import av
+import cv2
 import supervision as sv
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 from inference_sdk import InferenceHTTPClient
-import cv2
 import numpy as np
 
 # --- PAGE CONFIG ---
