@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 from inference_sdk import InferenceHTTPClient
 import cv2
 import supervision as sv
@@ -43,7 +43,7 @@ MODEL_ID = "your-food-waste-model/1"  # Replace with your model ID, e.g., "airli
 API_KEY = "your-roboflow-api-key"  # Replace with your Roboflow API key
 
 # Initialize Inference Client
-CLIENT = InferenceHTTPClient(
+client = InferenceHTTPClient(
     api_url="https://detect.roboflow.com",
     api_key=API_KEY
 )
@@ -56,58 +56,59 @@ CLASS_NAMES = [
     "jam_eaten", "jam_untouched",
     "butter_eaten", "butter_untouched",
     "bread_eaten", "bread_untouched",
-    "beverage_eaten", "beverage_untouched"
+    "beverage_drunk", "beverage_untouched"
 ]
 
 # Categories for analytics
 CATEGORIES = ["yogurt_ice_cream", "salad", "main", "jam", "butter", "bread", "beverage"]
 
-# Sidebar for controls
-with st.sidebar:
-    st.header("Controls")
-    confidence_threshold = st.slider("Confidence Threshold", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
-    st.markdown("Adjust the slider to fine-tune detection sensitivity.")
-    st.markdown("---")
-    st.markdown("**About the App**")
-    st.markdown("This AI app detects airline food waste for Cathay Pacific, classifying items as eaten or untouched to provide waste analytics.")
-
 # Main title
 st.title("Cathay Pacific AI Food Waste Detector")
 st.markdown("Use your webcam to scan airline food trays. The app detects items and provides real-time waste analytics.")
 
-# Video Processor Class
-class FoodWasteProcessor(VideoProcessorBase):
-    def __init__(self, confidence_threshold):
-        self.confidence_threshold = confidence_threshold
-        self.detections = None
-        self.annotator = sv.BoxAnnotator()
+# Initialize Annotators
+box_annotator = sv.BoxAnnotator(thickness=2)
+label_annotator = sv.LabelAnnotator(text_scale=0.5, text_thickness=1)
 
-    def recv(self, frame):
-        img = frame.to_ndarray(format="bgr24")
+# Definition of the callback function
+# This function runs inside a separate thread for every single video frame
+def callback(frame: av.VideoFrame) -> av.VideoFrame:
+    # 1. Convert frame to numpy array (OpenCV format)
+    image = frame.to_ndarray(format="bgr24")
 
-        # Perform inference
-        results = CLIENT.infer(img, model_id=MODEL_ID)
+    # 2. Run Inference
+    # We send the image to Roboflow's API. 
+    # Note: For high FPS, a local model is better, but this is safest for public cloud memory.
+    try:
+        results = client.infer(image, model_id=MODEL_ID)
+        
+        # 3. Process Results
+        # The HTTP client returns a dictionary, we convert it to supervision Detections
+        detections = sv.Detections.from_inference(results)
 
-        # Convert to supervision detections
-        self.detections = sv.Detections.from_inference(results)
+        # 4. Annotate Frame
+        annotated_frame = box_annotator.annotate(scene=image.copy(), detections=detections)
+        annotated_frame = label_annotator.annotate(scene=annotated_frame, detections=detections)
+        
+    except Exception as e:
+        # If API fails (e.g., rate limit), just return the original frame
+        print(f"Error: {e}")
+        annotated_frame = image
 
-        # Filter by confidence
-        mask = self.detections.confidence > self.confidence_threshold
-        self.detections = self.detections[mask]
+    # 5. Return the annotated frame back to the browser
+    return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
 
-        # Annotate frame
-        annotated_frame = self.annotator.annotate(scene=img.copy(), detections=self.detections)
-
-        return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
-
-# Webcam streamer
-def create_processor():
-    return FoodWasteProcessor(confidence_threshold)
-
-ctx = webrtc_streamer(
-    key="food-waste-detector",
-    video_processor_factory=create_processor,
-    rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+# --- WEBRTC STREAMER ---
+# This is the magic component that replaces cv2.VideoCapture
+ctx= webrtc_streamer(
+    key="object-detection",
+    mode=WebRtcMode.SENDRECV,
+    rtc_configuration=RTCConfiguration(
+        {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+    ),
+    video_frame_callback=callback,
+    media_stream_constraints={"video": True, "audio": False},
+    async_processing=True,
 )
 
 # Analytics section
