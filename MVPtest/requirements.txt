@@ -1,5 +1,5 @@
-streamlit
-streamlit-webrtc
+streamlit==1.39.0  # Or latest
+streamlit-webrtc==0.47.9  # Latest as of now; check for updates
 supervision
 inference-sdk
 av
