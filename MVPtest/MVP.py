@@ -106,27 +106,42 @@ class VideoProcessor:
 
 # --- WEBRTC STREAMER ---
 # Use video_processor_factory to create an instance of VideoProcessor
+# Update RTCConfiguration to include TURN servers
 ctx = webrtc_streamer(
     key="object-detection",
     mode=WebRtcMode.SENDRECV,
     rtc_configuration=RTCConfiguration(
-        {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+        {
+            "iceServers": [
+                {"urls": ["stun:stun.l.google.com:19302"]},
+                {
+                    "urls": [
+                        "turn:openrelay.metered.ca:80",
+                        "turn:openrelay.metered.ca:443",
+                        "turn:openrelay.metered.ca:443?transport=tcp",
+                    ],
+                    "username": "openrelayproject",
+                    "credential": "openrelayprojectsecret",
+                },
+            ]
+        }
     ),
     video_processor_factory=VideoProcessor,
     media_stream_constraints={"video": True, "audio": False},
     async_processing=True,
 )
 
-# Analytics section
+# Analytics section (keep as is)
 analytics_placeholder = st.empty()
 
-# Footer
+# Footer (keep as is)
 st.markdown("---")
 st.markdown("Made by Wilson C. @CUBIK")
 st.markdown("Powered by Streamlit, Roboflow Inference, and Supervision.")
 st.markdown("Designed for Cathay Pacific sustainability initiatives.")
 
-while ctx.state.playing and ctx.video_processor:
+# Replace the while loop with this for dynamic updates
+if ctx.state.playing and ctx.video_processor:
     with ctx.video_processor._lock:
         detections = ctx.video_processor.detections
     
@@ -134,7 +149,7 @@ while ctx.state.playing and ctx.video_processor:
         if detections is not None and len(detections) > 0:
             st.subheader("Detected Items and Waste Analytics")
 
-            # Create DataFrame from detections
+            # Create DataFrame from detections (keep your code here)
             class_ids = detections.class_id
             confidences = detections.confidence
             class_names = [CLASS_NAMES[id] for id in class_ids]
@@ -147,7 +162,7 @@ while ctx.state.playing and ctx.video_processor:
             # Display detected items table
             st.table(df)
 
-            # Calculate waste per category
+            # Calculate waste per category (keep your code here)
             waste_data = {}
             overall_eaten = 0
             overall_untouched = 0
@@ -174,14 +189,14 @@ while ctx.state.playing and ctx.video_processor:
             overall_waste_perc = (overall_untouched / overall_total * 100) if overall_total > 0 else 0
             st.metric("Overall Waste Percentage", f"{overall_waste_perc:.2f}%")
 
-            # Bar chart for waste %
+            # Bar chart for waste % (keep your code here)
             fig, ax = plt.subplots()
             waste_df["Waste %"].plot(kind="bar", ax=ax, color="#00645A")
             ax.set_ylabel("Waste Percentage")
             ax.set_title("Waste Percentage by Category")
             st.pyplot(fig)
 
-            # Pie chart for overall
+            # Pie chart for overall (keep your code here)
             if overall_total > 0:
                 pie_fig, pie_ax = plt.subplots()
                 pie_ax.pie([overall_eaten, overall_untouched], labels=["Eaten", "Untouched"], autopct="%1.1f%%", colors=["#00645A", "#E70013"])
@@ -189,5 +204,8 @@ while ctx.state.playing and ctx.video_processor:
                 st.pyplot(pie_fig)
         else:
             st.info("No detections yet. Point the camera at a food tray.")
-    
-    time.sleep(1)
+
+    # Enable periodic updates
+    if st.checkbox("Enable live analytics updates", value=True):
+        time.sleep(1)
+        st.rerun()
